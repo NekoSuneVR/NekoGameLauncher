@@ -89,6 +89,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool BoostGamePriority { get => _boostGamePriority; set => Set(ref _boostGamePriority, value); }
     public string NewEndpointName { get => _newEndpointName; set => Set(ref _newEndpointName, value); }
     public string NewEndpointUrl { get => _newEndpointUrl; set => Set(ref _newEndpointUrl, value); }
+    public string PricingRegion => _dealsService.RegionDescription;
 
     public bool IsGamingModeEnabled
     {
@@ -154,6 +155,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (_gamingModeService.IsEnabled) await _gamingModeService.DisableAsync();
     }
 
+    public async Task RefreshLibraryFromManagementAsync()
+    {
+        await RefreshLibraryAsync();
+    }
+
     private bool FilterGame(object value)
     {
         if (value is not GameEntry game) return false;
@@ -169,7 +175,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Replace(Games, games);
         UpdateLaunchers();
         await MonitorTickAsync();
-        Status = $"Found {Games.Count} installed games";
+        Status = $"Found {Games.Count} installed games • right-click a game card to manage/uninstall";
     }
 
     private async Task MonitorTickAsync()
@@ -230,11 +236,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task RefreshDealsAsync()
     {
-        Status = "Checking game offers...";
+        Status = $"Checking game offers • Windows pricing region {_dealsService.RegionDescription}...";
         SyncSettingsFromUi();
         var deals = await _dealsService.GetOffersAsync(_settings, DealsQuery, FreeOnly);
         Replace(Deals, deals);
-        Status = $"Loaded {Deals.Count} offers";
+        Status = $"Loaded {Deals.Count} offers • CheapShark prices are labelled USD • region {_dealsService.RegionDescription}";
     }
 
     private async Task LookupGamesAsync()
@@ -244,12 +250,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Status = "Type a game name to look it up";
             return;
         }
-        Status = $"Looking up {DealsQuery}...";
+        Status = $"Looking up {DealsQuery} • checking Steam regional price for {_dealsService.RegionDescription}...";
         try
         {
             var results = await _dealsService.SearchGamesAsync(DealsQuery);
             Replace(OnlineGames, results);
-            Status = $"Found {OnlineGames.Count} matching games";
+            Status = $"Found {OnlineGames.Count} matching games • regional Steam pricing {_dealsService.RegionDescription}";
         }
         catch { Status = "Game lookup failed; try again later"; }
     }
