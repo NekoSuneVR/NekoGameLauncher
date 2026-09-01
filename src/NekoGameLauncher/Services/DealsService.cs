@@ -8,12 +8,16 @@ namespace NekoGameLauncher.Services;
 public sealed class DealsService
 {
     private readonly HttpClient _http;
+    private readonly RegionPricingService _regionalPricing;
 
     public DealsService()
     {
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("NekoGameLauncher/0.1 (+https://github.com/NekoSuneVR/NekoGameLauncher)");
+        _regionalPricing = new RegionPricingService(_http);
     }
+
+    public string RegionDescription => _regionalPricing.RegionDescription;
 
     public async Task<IReadOnlyList<DealOffer>> GetOffersAsync(AppSettings settings, string? query, bool freeOnly, CancellationToken cancellationToken = default)
     {
@@ -45,26 +49,45 @@ public sealed class DealsService
     public async Task<IReadOnlyList<GameLookupResult>> SearchGamesAsync(string query, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
-        var url = $"https://www.cheapshark.com/api/1.0/games?title={Uri.EscapeDataString(query)}&limit=40";
+        var url = $"https://www.cheapshark.com/api/1.0/games?title={Uri.EscapeDataString(query)}&limit=25";
         using var response = await _http.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
         var results = new List<GameLookupResult>();
         if (doc.RootElement.ValueKind != JsonValueKind.Array) return results;
+
         foreach (var item in doc.RootElement.EnumerateArray())
         {
             var dealId = GetString(item, "cheapestDealID");
+            var sourcePrice = GetString(item, "cheapest");
             results.Add(new GameLookupResult
             {
                 GameId = GetString(item, "gameID"),
                 Name = GetString(item, "external"),
                 SteamAppId = GetString(item, "steamAppID"),
-                CheapestPrice = GetString(item, "cheapest"),
+                SourceCheapestPrice = sourcePrice,
+                CheapestPrice = $"{FormatUsd(sourcePrice)} (CheapShark)",
                 DealUrl = string.IsNullOrWhiteSpace(dealId) ? string.Empty : $"https://www.cheapshark.com/redirect?dealID={dealId}",
                 ThumbnailUrl = GetString(item, "thumb")
             });
         }
+
+        var enrichTasks = results
+            .Where(result => !string.IsNullOrWhiteSpace(result.SteamAppId))
+            .Take(20)
+            .Select(result => EnrichWithRegionalSteamPriceAsync(result, cancellationToken));
+        await Task.WhenAll(enrichTasks);
         return results;
+    }
+
+    private async Task EnrichWithRegionalSteamPriceAsync(GameLookupResult result, CancellationToken cancellationToken)
+    {
+        var local = await _regionalPricing.GetSteamPriceAsync(result.SteamAppId, cancellationToken);
+        if (local is null) return;
+        result.RegionalPrice = local.DisplayPrice;
+        result.RegionalCurrency = local.CurrencyCode;
+        result.PriceRegion = local.CountryCode;
+        result.CheapestPrice = $"{FormatUsd(result.SourceCheapestPrice)} (CheapShark) • Steam {local.CountryCode}: {local.DisplayPrice} {local.CurrencyCode}";
     }
 
     private async Task<IEnumerable<DealOffer>> GetGamerPowerAsync(string? query, CancellationToken ct)
@@ -86,7 +109,8 @@ public sealed class DealsService
                 Store = GetString(item, "platforms"),
                 Source = "GamerPower",
                 SalePrice = "0.00",
-                NormalPrice = GetString(item, "worth").TrimStart('$'),
+                NormalPrice = EnsureUsdLabel(GetString(item, "worth")),
+                CurrencyCode = "USD",
                 SavingsPercent = 100,
                 IsFree = true,
                 DealUrl = GetString(item, "open_giveaway_url"),
@@ -110,6 +134,7 @@ public sealed class DealsService
         foreach (var item in doc.RootElement.EnumerateArray())
         {
             var sale = GetString(item, "salePrice");
+            var normal = GetString(item, "normalPrice");
             _ = decimal.TryParse(GetString(item, "savings"), NumberStyles.Float, CultureInfo.InvariantCulture, out var savings);
             _ = decimal.TryParse(sale, NumberStyles.Float, CultureInfo.InvariantCulture, out var saleValue);
             var dealId = GetString(item, "dealID");
@@ -120,7 +145,8 @@ public sealed class DealsService
                 Store = $"Store {GetString(item, "storeID")}",
                 Source = "CheapShark",
                 SalePrice = sale,
-                NormalPrice = GetString(item, "normalPrice"),
+                NormalPrice = FormatUsd(normal),
+                CurrencyCode = "USD",
                 SavingsPercent = Math.Round(savings, 1),
                 IsFree = saleValue == 0,
                 DealUrl = string.IsNullOrWhiteSpace(dealId) ? string.Empty : $"https://www.cheapshark.com/redirect?dealID={dealId}",
@@ -148,6 +174,7 @@ public sealed class DealsService
             if (!string.IsNullOrWhiteSpace(query) && !title.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
             var sale = GetFirst(item, "salePrice", "sale_price", "price");
             var normal = GetFirst(item, "normalPrice", "normal_price", "retailPrice", "worth");
+            var currency = GetFirst(item, "currency", "currencyCode", "currency_code").ToUpperInvariant();
             var freeText = GetFirst(item, "isFree", "is_free", "free");
             var isFree = freeText.Equals("true", StringComparison.OrdinalIgnoreCase) || sale is "0" or "0.0" or "0.00";
             result.Add(new DealOffer
@@ -157,7 +184,8 @@ public sealed class DealsService
                 Store = GetFirst(item, "store", "platform", "platforms"),
                 Source = endpoint.Name,
                 SalePrice = sale,
-                NormalPrice = normal,
+                NormalPrice = string.IsNullOrWhiteSpace(currency) ? normal : $"{normal} {currency}",
+                CurrencyCode = currency,
                 IsFree = isFree,
                 SavingsPercent = ParseDecimal(GetFirst(item, "savings", "discount", "discountPercent")),
                 DealUrl = GetFirst(item, "url", "dealUrl", "deal_url", "open_giveaway_url"),
@@ -199,4 +227,19 @@ public sealed class DealsService
 
     private static decimal ParseDecimal(string value)
         => decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : 0;
+
+    private static string FormatUsd(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "Price unavailable";
+        var clean = value.Trim().TrimStart('$');
+        return decimal.TryParse(clean, NumberStyles.Float, CultureInfo.InvariantCulture, out var amount)
+            ? $"${amount:0.00} USD"
+            : $"${clean} USD";
+    }
+
+    private static string EnsureUsdLabel(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        return FormatUsd(value);
+    }
 }
