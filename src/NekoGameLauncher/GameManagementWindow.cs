@@ -121,7 +121,7 @@ public sealed class GameManagementWindow : Window
         panel.Children.Add(new TextBlock { Text = plan.Detail, Foreground = ResourceBrush("MutedTextBrush"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
 
         var buttons = new WrapPanel();
-        var uninstall = new Button { Content = "UNINSTALL / OPEN UNINSTALLER", Padding = new Thickness(16, 8) };
+        var uninstall = new Button { Content = "UNINSTALL / OPEN UNINSTALLER", Padding = new Thickness(16, 8, 16, 8) };
         uninstall.Click += (_, _) => StartUninstall();
         buttons.Children.Add(uninstall);
         var openFolder = SecondaryButton("OPEN INSTALL FOLDER");
@@ -162,7 +162,7 @@ public sealed class GameManagementWindow : Window
         scan.Click += async (_, _) => await ScanAsync();
         actions.Children.Add(scan);
         _deleteButton.Content = "DELETE SAFE LEFTOVERS";
-        _deleteButton.Padding = new Thickness(16, 8);
+        _deleteButton.Padding = new Thickness(16, 8, 16, 8);
         _deleteButton.IsEnabled = false;
         _deleteButton.Click += async (_, _) => await DeleteAsync();
         actions.Children.Add(_deleteButton);
@@ -275,7 +275,7 @@ public sealed class GameManagementWindow : Window
 
     private static Button SecondaryButton(string text)
     {
-        var button = new Button { Content = text, Padding = new Thickness(14, 8) };
+        var button = new Button { Content = text, Padding = new Thickness(14, 8, 14, 8) };
         button.SetResourceReference(StyleProperty, "SecondaryButtonStyle");
         return button;
     }
