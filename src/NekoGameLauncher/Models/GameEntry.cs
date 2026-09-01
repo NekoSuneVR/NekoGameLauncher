@@ -92,7 +92,7 @@ public sealed class GameEntry : INotifyPropertyChanged
     public string SessionLabel => IsRunning ? $"Session {FormatDuration(CurrentSessionSeconds)}" : $"{LaunchCount} sessions";
 
     [JsonIgnore]
-    public string PerformanceLabel => IsRunning ? $"{CpuUsagePercent:0}% CPU  •  {MemoryMb:0} MB" : "Ready";
+    public string PerformanceLabel => IsRunning ? $"{CpuUsagePercent:0}% CPU  •  {MemoryMb:0} MB" : "Ready • right-click to manage";
 
     private static string FormatDuration(long seconds)
     {
