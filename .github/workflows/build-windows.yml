@@ -1,0 +1,35 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore NekoGameLauncher.sln
+      - name: Build
+        run: dotnet build NekoGameLauncher.sln -c Release --no-restore
+      - name: Publish ${{ matrix.runtime }}
+        run: dotnet publish src/NekoGameLauncher/NekoGameLauncher.csproj -c Release -r ${{ matrix.runtime }} --self-contained false -o artifacts/${{ matrix.runtime }}
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: NekoGameLauncher-${{ matrix.runtime }}
+          path: artifacts/${{ matrix.runtime }}/
