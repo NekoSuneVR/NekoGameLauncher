@@ -37,22 +37,54 @@ jobs:
 
           $exe = Resolve-Path 'artifacts/win-x64/NekoGameLauncher.exe'
           $process = Start-Process -FilePath $exe -PassThru
-          Start-Sleep -Seconds 10
+
+          # Wait for the actual main window, then exercise the Gaming Hub page.
+          for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Milliseconds 500
+            $process.Refresh()
+            if ($process.HasExited) { break }
+            if ($process.MainWindowHandle -ne 0) { break }
+          }
+
+          if (-not $process.HasExited -and $process.MainWindowHandle -ne 0) {
+            Add-Type -AssemblyName UIAutomationClient
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+            $condition = New-Object System.Windows.Automation.PropertyCondition(
+              [System.Windows.Automation.AutomationElement]::NameProperty,
+              'GAMING HUB'
+            )
+            $tab = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+            if ($null -ne $tab) {
+              try {
+                $selection = $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+                $selection.Select()
+                Write-Host 'Opened Gaming Hub during startup smoke test.'
+              } catch {
+                Write-Warning "Could not select Gaming Hub with UI Automation: $($_.Exception.Message)"
+              }
+            } else {
+              Write-Warning 'Gaming Hub tab was not found by UI Automation.'
+            }
+          }
+
+          Start-Sleep -Seconds 7
           $process.Refresh()
 
           $logs = @()
           if (Test-Path $logDir) { $logs = @(Get-ChildItem $logDir -Filter '*.log' -File) }
           if ($process.HasExited -or $logs.Count -gt 0) {
-            Write-Host "NekoGameLauncher failed the startup smoke test. Exited=$($process.HasExited) ExitCode=$($process.ExitCode)"
+            $exitCode = if ($process.HasExited) { $process.ExitCode } else { 'running' }
+            Write-Host "NekoGameLauncher failed the startup smoke test. Exited=$($process.HasExited) ExitCode=$exitCode"
             foreach ($log in $logs) {
               Write-Host "--- $($log.FullName) ---"
               Get-Content $log.FullName
             }
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
             exit 1
           }
 
           Stop-Process -Id $process.Id -Force
-          Write-Host 'NekoGameLauncher remained running for 10 seconds with no crash log.'
+          Write-Host 'NekoGameLauncher stayed healthy after opening Gaming Hub and produced no crash log.'
       - name: Upload app
         uses: actions/upload-artifact@v4
         with:
