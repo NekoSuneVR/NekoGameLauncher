@@ -28,6 +28,31 @@ jobs:
         run: dotnet build NekoGameLauncher.sln -c Release --no-restore
       - name: Publish ${{ matrix.runtime }}
         run: dotnet publish src/NekoGameLauncher/NekoGameLauncher.csproj -c Release -r ${{ matrix.runtime }} --self-contained false -o artifacts/${{ matrix.runtime }}
+      - name: Startup smoke test
+        if: matrix.runtime == 'win-x64'
+        shell: pwsh
+        run: |
+          $logDir = Join-Path $env:LOCALAPPDATA 'NekoGameLauncher\logs'
+          if (Test-Path $logDir) { Remove-Item $logDir -Recurse -Force }
+
+          $exe = Resolve-Path 'artifacts/win-x64/NekoGameLauncher.exe'
+          $process = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 10
+          $process.Refresh()
+
+          $logs = @()
+          if (Test-Path $logDir) { $logs = @(Get-ChildItem $logDir -Filter '*.log' -File) }
+          if ($process.HasExited -or $logs.Count -gt 0) {
+            Write-Host "NekoGameLauncher failed the startup smoke test. Exited=$($process.HasExited) ExitCode=$($process.ExitCode)"
+            foreach ($log in $logs) {
+              Write-Host "--- $($log.FullName) ---"
+              Get-Content $log.FullName
+            }
+            exit 1
+          }
+
+          Stop-Process -Id $process.Id -Force
+          Write-Host 'NekoGameLauncher remained running for 10 seconds with no crash log.'
       - name: Upload app
         uses: actions/upload-artifact@v4
         with:
