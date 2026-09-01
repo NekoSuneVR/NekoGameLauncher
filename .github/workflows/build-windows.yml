@@ -1,14 +1,15 @@
-name: Build Windows App
+name: Build Windows Gaming Node
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - build/windows-gaming-node-release
   pull_request:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -22,12 +23,25 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Read app version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content 'src/NekoGameLauncher/NekoGameLauncher.csproj'
+          $version = $project.Project.PropertyGroup.Version | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = '0.0.0' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Restore
         run: dotnet restore NekoGameLauncher.sln
+
       - name: Build
         run: dotnet build NekoGameLauncher.sln -c Release --no-restore
+
       - name: Publish ${{ matrix.runtime }}
-        run: dotnet publish src/NekoGameLauncher/NekoGameLauncher.csproj -c Release -r ${{ matrix.runtime }} --self-contained false -o artifacts/${{ matrix.runtime }}
+        run: dotnet publish src/NekoGameLauncher/NekoGameLauncher.csproj -c Release -r ${{ matrix.runtime }} --self-contained true -p:PublishReadyToRun=false -o artifacts/${{ matrix.runtime }}
+
       - name: Startup smoke test
         if: matrix.runtime == 'win-x64'
         shell: pwsh
@@ -38,7 +52,6 @@ jobs:
           $exe = Resolve-Path 'artifacts/win-x64/NekoGameLauncher.exe'
           $process = Start-Process -FilePath $exe -PassThru
 
-          # Wait for the actual main window, then exercise the Gaming Hub page.
           for ($i = 0; $i -lt 20; $i++) {
             Start-Sleep -Milliseconds 500
             $process.Refresh()
@@ -62,31 +75,71 @@ jobs:
               } catch {
                 Write-Warning "Could not select Gaming Hub with UI Automation: $($_.Exception.Message)"
               }
-            } else {
-              Write-Warning 'Gaming Hub tab was not found by UI Automation.'
             }
           }
 
           Start-Sleep -Seconds 7
           $process.Refresh()
-
           $logs = @()
           if (Test-Path $logDir) { $logs = @(Get-ChildItem $logDir -Filter '*.log' -File) }
           if ($process.HasExited -or $logs.Count -gt 0) {
-            $exitCode = if ($process.HasExited) { $process.ExitCode } else { 'running' }
-            Write-Host "NekoGameLauncher failed the startup smoke test. Exited=$($process.HasExited) ExitCode=$exitCode"
-            foreach ($log in $logs) {
-              Write-Host "--- $($log.FullName) ---"
-              Get-Content $log.FullName
-            }
+            foreach ($log in $logs) { Get-Content $log.FullName }
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
             exit 1
           }
 
           Stop-Process -Id $process.Id -Force
-          Write-Host 'NekoGameLauncher stayed healthy after opening Gaming Hub and produced no crash log.'
-      - name: Upload app
+          Write-Host 'Windows Gaming Node stayed healthy during smoke test.'
+
+      - name: Package release ZIP
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $zip = "NekoGameLauncher-Windows-Gaming-Node-$version-${{ matrix.runtime }}.zip"
+          Compress-Archive -Path "artifacts/${{ matrix.runtime }}/*" -DestinationPath "artifacts/$zip" -Force
+
+      - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NekoGameLauncher-${{ matrix.runtime }}
-          path: artifacts/${{ matrix.runtime }}/
+          name: NekoGameLauncher-Windows-Gaming-Node-${{ matrix.runtime }}
+          path: artifacts/NekoGameLauncher-Windows-Gaming-Node-${{ steps.version.outputs.version }}-${{ matrix.runtime }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish Windows Gaming Node release
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/NekoGameLauncher/NekoGameLauncher.csproj | head -n1)"
+          echo "version=${version:-0.0.0}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: NekoGameLauncher-Windows-Gaming-Node-*
+          merge-multiple: true
+          path: release-files
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: gaming-node-v${{ steps.version.outputs.version }}-build-${{ github.run_number }}
+          name: Windows Gaming Node v${{ steps.version.outputs.version }} (Build ${{ github.run_number }})
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            Windows Gaming Node build of NekoGameLauncher.
+
+            Version: `${{ steps.version.outputs.version }}`
+            Commit: `${{ github.sha }}`
+            Build: `${{ github.run_number }}`
+
+            Downloads include Windows x64 and Windows ARM64 self-contained builds. The .NET runtime is bundled, so a separate .NET installation is not required.
+          files: release-files/*.zip
+          fail_on_unmatched_files: true
