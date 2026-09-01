@@ -31,11 +31,11 @@ Discovery is deliberately layered. It uses launcher metadata where possible, Win
 
 ## Gaming Hub
 
-Neko Game Launcher now includes a local Gaming Hub rather than only acting as a shortcut list.
+Neko Game Launcher now includes a local Gaming Hub rather than only acting as a shortcut list. See [docs/gaming-hub.md](docs/gaming-hub.md) for the design and safety notes.
 
 ### Playtime and sessions
 
-- Tracks total playtime per detected game.
+- Tracks total playtime per game.
 - Tracks session count and current session duration.
 - Updates even if a detected game is launched from Steam, Epic, Wargaming, HoYoPlay or another original launcher instead of through Neko.
 - Detects a running game by matching running executables to the detected game install directory.
