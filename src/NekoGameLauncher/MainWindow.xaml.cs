@@ -20,7 +20,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += async (_, _) => await _viewModel.InitializeAsync();
-        AddHandler(Mouse.PreviewMouseRightButtonDownEvent, new MouseButtonEventHandler(GameCard_MouseRightButtonDown), true);
+        PreviewMouseRightButtonDown += GameCard_MouseRightButtonDown;
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -86,7 +86,7 @@ public partial class MainWindow : Window
         Header = header,
         Foreground = ResourceBrush("TextBrush"),
         Background = Brushes.Transparent,
-        Padding = new Thickness(10, 7)
+        Padding = new Thickness(10, 7, 10, 7)
     };
 
     private static Brush ResourceBrush(string key)
