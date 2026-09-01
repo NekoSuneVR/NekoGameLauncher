@@ -1,0 +1,92 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore NekoGameLauncher.sln
+      - name: Build
+        run: dotnet build NekoGameLauncher.sln -c Release --no-restore
+      - name: Publish ${{ matrix.runtime }}
+        run: dotnet publish src/NekoGameLauncher/NekoGameLauncher.csproj -c Release -r ${{ matrix.runtime }} --self-contained false -o artifacts/${{ matrix.runtime }}
+      - name: Startup smoke test
+        if: matrix.runtime == 'win-x64'
+        shell: pwsh
+        run: |
+          $logDir = Join-Path $env:LOCALAPPDATA 'NekoGameLauncher\logs'
+          if (Test-Path $logDir) { Remove-Item $logDir -Recurse -Force }
+
+          $exe = Resolve-Path 'artifacts/win-x64/NekoGameLauncher.exe'
+          $process = Start-Process -FilePath $exe -PassThru
+
+          # Wait for the actual main window, then exercise the Gaming Hub page.
+          for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Milliseconds 500
+            $process.Refresh()
+            if ($process.HasExited) { break }
+            if ($process.MainWindowHandle -ne 0) { break }
+          }
+
+          if (-not $process.HasExited -and $process.MainWindowHandle -ne 0) {
+            Add-Type -AssemblyName UIAutomationClient
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+            $condition = New-Object System.Windows.Automation.PropertyCondition(
+              [System.Windows.Automation.AutomationElement]::NameProperty,
+              'GAMING HUB'
+            )
+            $tab = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+            if ($null -ne $tab) {
+              try {
+                $selection = $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+                $selection.Select()
+                Write-Host 'Opened Gaming Hub during startup smoke test.'
+              } catch {
+                Write-Warning "Could not select Gaming Hub with UI Automation: $($_.Exception.Message)"
+              }
+            } else {
+              Write-Warning 'Gaming Hub tab was not found by UI Automation.'
+            }
+          }
+
+          Start-Sleep -Seconds 7
+          $process.Refresh()
+
+          $logs = @()
+          if (Test-Path $logDir) { $logs = @(Get-ChildItem $logDir -Filter '*.log' -File) }
+          if ($process.HasExited -or $logs.Count -gt 0) {
+            $exitCode = if ($process.HasExited) { $process.ExitCode } else { 'running' }
+            Write-Host "NekoGameLauncher failed the startup smoke test. Exited=$($process.HasExited) ExitCode=$exitCode"
+            foreach ($log in $logs) {
+              Write-Host "--- $($log.FullName) ---"
+              Get-Content $log.FullName
+            }
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+            exit 1
+          }
+
+          Stop-Process -Id $process.Id -Force
+          Write-Host 'NekoGameLauncher stayed healthy after opening Gaming Hub and produced no crash log.'
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: NekoGameLauncher-${{ matrix.runtime }}
+          path: artifacts/${{ matrix.runtime }}/
