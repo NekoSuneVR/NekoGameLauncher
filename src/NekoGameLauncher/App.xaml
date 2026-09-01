@@ -230,7 +230,7 @@
                                             <TextBlock Text="N" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                         <TextBlock Text="NEKO" FontSize="19" FontWeight="Bold" Margin="0,12,0,0" />
-                                        <TextBlock Text="GAME LAUNCHER" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource CyanBrush}" CharacterSpacing="140" />
+                                        <TextBlock Text="GAME LAUNCHER" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource CyanBrush}" />
                                     </StackPanel>
                                     <TabPanel Grid.Row="1" IsItemsHost="True" Margin="0,8,0,0" />
                                     <Border Grid.Row="2" Margin="16,12,16,20" Padding="12" Background="#0E1522" BorderBrush="{StaticResource DividerBrush}" BorderThickness="1" CornerRadius="10">
