@@ -19,8 +19,28 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _viewModel;
-        Loaded += async (_, _) => await _viewModel.InitializeAsync();
+        Loaded += MainWindow_Loaded;
         PreviewMouseRightButtonDown += GameCard_MouseRightButtonDown;
+    }
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        Loaded -= MainWindow_Loaded;
+        try
+        {
+            await _viewModel.InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.Status = "Startup scan failed; Neko is still open. Check the crash log for details.";
+            var log = CrashLogService.Write("MainWindow.InitializeAsync", ex);
+            MessageBox.Show(this,
+                "Neko Game Launcher opened, but part of startup initialization failed.\n\n" + ex.Message +
+                (string.IsNullOrWhiteSpace(log) ? string.Empty : $"\n\nCrash log:\n{log}"),
+                "Neko startup warning",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -29,7 +49,7 @@ public partial class MainWindow : Window
         {
             _shutdownHandled = true;
             try { _viewModel.ShutdownAsync().GetAwaiter().GetResult(); }
-            catch { }
+            catch (Exception ex) { CrashLogService.Write("MainWindow.ShutdownAsync", ex); }
         }
         base.OnClosing(e);
     }
