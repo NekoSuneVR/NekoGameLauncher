@@ -22,10 +22,13 @@ public sealed class LauncherDetectionService
             ["Battle.net"] = [Path.Combine(pfx86, "Battle.net", "Battle.net Launcher.exe")],
             ["Rockstar Games"] = [Path.Combine(pf, "Rockstar Games", "Launcher", "Launcher.exe")],
             ["Riot Games"] = [Path.Combine(common, "Riot Games", "RiotClientInstalls.json"), Path.Combine(local, "Riot Games", "Riot Client", "RiotClientServices.exe")],
-            ["Xbox / Microsoft Store"] = [Path.Combine(local, "Microsoft", "WindowsApps", "XboxPcApp.exe")]
+            ["Xbox / Microsoft Store"] = [Path.Combine(local, "Microsoft", "WindowsApps", "XboxPcApp.exe")],
+            ["Wargaming.net"] = [Path.Combine(common, "Wargaming.net", "GameCenter", "wgc.exe"), Path.Combine(pfx86, "Wargaming.net", "GameCenter", "wgc.exe")],
+            ["HoYoPlay"] = [Path.Combine(pf, "HoYoPlay", "launcher.exe"), Path.Combine(pfx86, "HoYoPlay", "launcher.exe")],
+            ["Kuro Games"] = [Path.Combine(pf, "Wuthering Waves", "launcher.exe"), Path.Combine(pfx86, "Wuthering Waves", "launcher.exe")]
         };
 
-        return candidates.Select(item =>
+        var result = candidates.Select(item =>
         {
             var path = item.Value.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p)) ?? string.Empty;
             return new LauncherStatus
@@ -36,5 +39,12 @@ public sealed class LauncherDetectionService
                 GameCount = gameList.Count(g => g.Launcher.Equals(item.Key, StringComparison.OrdinalIgnoreCase))
             };
         }).ToList();
+
+        foreach (var group in gameList.GroupBy(g => g.Launcher, StringComparer.OrdinalIgnoreCase))
+        {
+            if (result.Any(x => x.Name.Equals(group.Key, StringComparison.OrdinalIgnoreCase))) continue;
+            result.Add(new LauncherStatus { Name = group.Key, IsInstalled = true, GameCount = group.Count() });
+        }
+        return result.OrderByDescending(x => x.IsInstalled).ThenBy(x => x.Name).ToList();
     }
 }

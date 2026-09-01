@@ -21,7 +21,8 @@ public sealed class LibraryService
             new RegistryPublisherGameProvider("Battle.net", ["Blizzard Entertainment", "Activision Blizzard"], "Battle.net"),
             new RegistryPublisherGameProvider("Rockstar Games", ["Rockstar Games"], "Rockstar Games Launcher", "Social Club"),
             new RegistryPublisherGameProvider("Riot Games", ["Riot Games"], "Riot Client"),
-            new XboxGameProvider()
+            new XboxGameProvider(),
+            new KnownGameProvider()
         };
         var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NekoGameLauncher");
         Directory.CreateDirectory(folder);

@@ -27,9 +27,15 @@ public sealed class LaunchService
     public bool OpenUrl(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)) return false;
+        return OpenTarget(uri.ToString());
+    }
+
+    public bool OpenTarget(string target)
+    {
+        if (string.IsNullOrWhiteSpace(target)) return false;
         try
         {
-            Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
             return true;
         }
         catch { return false; }
