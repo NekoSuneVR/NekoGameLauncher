@@ -104,10 +104,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public string GamingModeLabel => IsGamingModeEnabled ? "GAMING MODE ACTIVE" : "GAMING MODE OFF";
     public string GamingModeDetail => IsGamingModeEnabled ? "High Performance power plan + game process boost" : "Your normal Windows power plan is being used";
-    public double SystemCpuPercent { get => _systemCpuPercent; private set => Set(ref _systemCpuPercent, value); }
+    public double SystemCpuPercent { get => _systemCpuPercent; set => Set(ref _systemCpuPercent, value); }
     public double MemoryUsedGb { get => _memoryUsedGb; private set => Set(ref _memoryUsedGb, value); }
     public double MemoryTotalGb { get => _memoryTotalGb; private set => Set(ref _memoryTotalGb, value); }
-    public double MemoryPercent { get => _memoryPercent; private set => Set(ref _memoryPercent, value); }
+    public double MemoryPercent { get => _memoryPercent; set => Set(ref _memoryPercent, value); }
     public int ActiveGameCount { get => _activeGameCount; private set => Set(ref _activeGameCount, value); }
     public string ActiveGameName { get => _activeGameName; private set => Set(ref _activeGameName, value); }
     public double ActiveGameCpuPercent { get => _activeGameCpuPercent; private set => Set(ref _activeGameCpuPercent, value); }
